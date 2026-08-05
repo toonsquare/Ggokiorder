@@ -1,0 +1,23 @@
+<div class="ggokiorder-wrapper">
+  <div #scrollDiv (mousedown)="unselectAllItem($event)" (scroll)="setScroll($event)" class="scroll-wrapper scroll-container">
+    <div #orderDiv class="order-wrapper">
+      <!-- 요소 목록 -->
+      <ng-content></ng-content>
+      <div #emptyDiv class="empty-item"></div>
+
+      <!-- 이동시킬 요소 목적지 표시 디바이더 (부모 하위 위치면 자식 행처럼 들여쓰기) -->
+      <div
+        #goalDivider
+        [ngClass]="{ visible: targetIndex !== undefined && targetIndex >= 0 && isMoving, indented: isDividerIndented }"
+        [style.top.px]="targetTop"
+        class="goal-divider"
+      ></div>
+    </div>
+  </div>
+
+  <!-- 요소 이동시 스크롤 -->
+  @if (isMoving) {
+    <div (mouseenter)="toggleMovingScroll(true, -30)" (mouseleave)="toggleMovingScroll(false)" class="scroll-div scroll-up"></div>
+    <div (mouseenter)="toggleMovingScroll(true)" (mouseleave)="toggleMovingScroll(false)" class="scroll-div scroll-down"></div>
+  }
+</div>

@@ -1,0 +1,84 @@
+:host {
+  --max-height: none;
+  --scroll-spot-height: 20px;
+
+  --goal-width: 100%;
+  --goal-thickness: 2px;
+  --goal-color: red;
+  --goal-radius: 1px;
+  --child-indent: 0px;
+}
+
+.ggokiorder-wrapper {
+  display: flex;
+  position: relative;
+  height: 100%;
+
+  .scroll-container {
+    overflow: auto;
+
+    scrollbar-color: rgba(0, 0, 0, 0.5) transparent;
+  }
+
+  .scroll-wrapper {
+    display: flex;
+    position: relative;
+    height: 100%;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    .order-wrapper {
+      position: relative;
+      width: 100%;
+      transition: scroll ease-in-out 100ms;
+
+      max-height: var(--max-height);
+
+      .empty-item {
+        position: absolute;
+        background: transparent;
+        width: 100%;
+        z-index: 0;
+      }
+
+      .goal-divider {
+        position: absolute;
+        visibility: hidden;
+
+        left: calc((100% - var(--goal-width)) / 2);
+        width: var(--goal-width);
+        background: var(--goal-color);
+        height: var(--goal-thickness);
+        border-radius: var(--goal-radius);
+
+        &.visible {
+          visibility: visible;
+          z-index: 2;
+        }
+
+        &.indented {
+          left: calc((100% - var(--goal-width)) / 2 + var(--child-indent) + 4px);
+          width: calc(var(--goal-width) - var(--child-indent) - 4px);
+        }
+      }
+    }
+  }
+
+  .scroll-div {
+    position: absolute;
+    width: 100%;
+    background: transparent;
+    z-index: 2000;
+
+    height: var(--scroll-spot-height);
+
+    &.scroll-up {
+      top: 0;
+    }
+
+    &.scroll-down {
+      bottom: 0;
+    }
+  }
+}
