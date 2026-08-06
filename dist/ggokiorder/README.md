@@ -49,7 +49,7 @@
 
 - __필수__ `Input`. 타입 `T[]` (`T extends GgokiorderObject`)
 - 요소 목록에 대응하는 object 배열. `orderDirective` 를 붙인 요소들과 순서가 일치해야 한다
-- `GgokiorderObject` 는 `{ id: number; parentObjectId: number | null }` 를 만족해야 한다
+- `GgokiorderObject` 는 `{ id: number; parentObjectId?: number | null }` 를 만족해야 한다 (`parentObjectId` 는 선택. isHierarchy 를 쓰지 않으면 없어도 된다)
 - __ggokiorder 가 이동 결과를 이 배열에 직접 반영(in-place)한다__
 
 ### `selected`
@@ -79,7 +79,7 @@
 
 - 선택 `Input`. 타입 `boolean`. 기본값 `false`
 - 부모-자식 계층 모드 사용 여부
-- `true` 일 경우 `objects` 는 `parentObjectId` 로 부모를 가리키고, 부모 행은 `isCollapsed` (Angular `WritableSignal<boolean>`) 로 접힘 상태를 노출해야 한다
+- `true` 일 경우 `objects` 는 `parentObjectId` 로 부모를 가리키고(없거나 `null` 이면 최상위), 부모 행은 `isCollapsed` (Angular `WritableSignal<boolean>`) 로 접힘 상태를 노출해야 한다
 - 부모 행을 이동시키면 자식 행이 함께 이동하고, 행 가운데 영역에 드랍하면 해당 행의 하위로 편입된다
 - 부모 접기/펼치기는 `toggleCollapse(object: T)` public 메서드로 처리한다
 
@@ -91,7 +91,7 @@
   ```
   MovedObject[]: {
     order: number;          // 이동 후 objects 배열에서의 새 index
-    parentObjectId: number | null;  // 이동 후 소속 부모 id (null = 최상위). isHierarchy 아니면 항상 null
+    parentObjectId?: number | null; // 이동 후 소속 부모 id (null = 최상위). isHierarchy 아니면 담기지 않음
   }[]
   ```
 - 순서 또는 소속이 __바뀐 항목만__ 담아 전달
@@ -194,7 +194,7 @@ interface TestObject extends GgokiorderObject {
 })
 export class Test {
   public tests: TestObject[] = ['ㄱㄱㄱ', 'ㄴㄴㄴ', 'ㄷㄷㄷ', 'ㄹㄹㄹ', 'ㅁㅁㅁ', 'ㅂㅂㅂ', 'ㅅㅅㅅ', 'ㅇㅇㅇ', 'ㅈㅈㅈ', 'ㅊㅊㅊ', 'ㅋㅋㅋ', 'ㅌㅌㅌ', 'ㅍㅍㅍ', 'ㅎㅎㅎ'].map(
-    (name, id) => ({ id, name, parentObjectId: null })
+    (name, id) => ({ id, name })
   );
   public testsSelected: number[] = [];
 
@@ -203,7 +203,7 @@ export class Test {
    * @return {void}
    */
   testAddFunc(): void {
-    this.tests.push({ id: Date.now(), name: Math.random().toString(), parentObjectId: null });
+    this.tests.push({ id: Date.now(), name: Math.random().toString() });
   }
 
   /**
@@ -227,9 +227,9 @@ export class Test {
   orderChange(moved: MovedObject[]): void {
     if (moved.length === 0) return;
 
-    moved.forEach(({ order, parentObjectId }) => {
+    moved.forEach(({ order }) => {
       const object: TestObject = this.tests[order];
-      console.log(object, order, parentObjectId);
+      console.log(object, order);
     });
   }
 

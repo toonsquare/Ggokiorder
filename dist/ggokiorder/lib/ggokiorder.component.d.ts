@@ -277,6 +277,7 @@ export declare class GgokiorderComponent<T extends GgokiorderObject = Ggokiorder
      * 이동으로 순서 또는 소속이 바뀐 항목만 골라 이동 결과 배열을 만든다.
      * 받은 쪽이 order 를 index 로 대상 object 를 얻고, 한 번의 순회로 순서 저장과 소속 변경을 처리할 수 있도록
      * 각 항목에 새 order·parentObjectId 를 담는다. (object 자체는 공유 배열의 index 로 얻으므로 담지 않는다)
+     * isHierarchy 가 아니면 parentObjectId 는 담지 않는다.
      * @param {T[]} resultObjects 이동 결과 순서의 object 목록 (index = 새 order)
      * @param {MovedItem[]} movedResults 이동 결과(각 항목의 prev = 이동 전 index)
      * @param {Map<T, number | null>} parentChanges 소속이 바뀐 object → 새 부모 id(null = 최상위) Map
