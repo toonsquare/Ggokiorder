@@ -37,6 +37,12 @@
 - `GgokiorderComponent` 와 `OrderDirective` 모두 standalone 이다
 - 사용하는 standalone 컴포넌트의 `@Component > imports` (혹은 `*.module.ts > @NgModule > imports`) 에 `GgokiorderComponent`, `OrderDirective` 추가
 
+## 지원 환경
+
+- Angular 19 / 20 / 21
+- zone.js, zoneless(`provideZonelessChangeDetection`) 모두 지원
+- SSR 안전. 서버에서는 `ResizeObserver` 등록과 레이아웃 계산을 하지 않고 브라우저 첫 렌더 뒤에 초기화한다
+
 ## Input 데코레이터
 
 ### `objects`
@@ -126,6 +132,8 @@
 
 - ggokiorder 에 넣어주는 __요소마다 반드시 붙여야 하는__ directive
 - `mousedown` 감지, 요소 크기 변경(`ResizeObserver`) 감지, 위치 스타일 적용을 담당한다
+- 요소에 `position`, `top`, `left`, `z-index`, `opacity` 를 직접 지정하므로 이 속성들은 소비자 쪽에서 지정해도 덮어써진다. 그 외 인라인 스타일은 유지된다
+- 행을 래퍼 요소로 감싸도 인식된다 (`@ContentChildren` 이 `descendants: true`)
 
 ## scss
 
@@ -186,7 +194,7 @@ interface TestObject extends GgokiorderObject {
 })
 export class Test {
   public tests: TestObject[] = ['ㄱㄱㄱ', 'ㄴㄴㄴ', 'ㄷㄷㄷ', 'ㄹㄹㄹ', 'ㅁㅁㅁ', 'ㅂㅂㅂ', 'ㅅㅅㅅ', 'ㅇㅇㅇ', 'ㅈㅈㅈ', 'ㅊㅊㅊ', 'ㅋㅋㅋ', 'ㅌㅌㅌ', 'ㅍㅍㅍ', 'ㅎㅎㅎ'].map(
-    (name, id) => ({ id, name })
+    (name, id) => ({ id, name, parentObjectId: null })
   );
   public testsSelected: number[] = [];
 
@@ -195,7 +203,7 @@ export class Test {
    * @return {void}
    */
   testAddFunc(): void {
-    this.tests.push({ id: Date.now(), name: Math.random().toString() });
+    this.tests.push({ id: Date.now(), name: Math.random().toString(), parentObjectId: null });
   }
 
   /**

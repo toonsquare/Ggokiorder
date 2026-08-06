@@ -9,6 +9,7 @@ export declare class OrderDirective implements OnDestroy {
     prevHeight: number;
     element: ElementRef;
     private resizeObserver;
+    private resizeFrame;
     private readonly isBrowser;
     constructor();
     ngOnDestroy(): void;
@@ -22,6 +23,13 @@ export declare class OrderDirective implements OnDestroy {
      * @return {void}
      */
     addEvent(): void;
+    /**
+     * 리사이즈 알림 emit.
+     * ResizeObserver 콜백 안에서 동기로 레이아웃을 바꾸면 브라우저가
+     * 'ResizeObserver loop completed with undelivered notifications' 를 띄우므로 다음 프레임으로 미룬다.
+     * @return {void}
+     */
+    emitNeedResize(): void;
     /**
      * 이벤트 제거
      * @return {void}

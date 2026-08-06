@@ -3,7 +3,6 @@ import { isPlatformBrowser } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { OrderEvent, BASE_TRANSITION_TIME } from './ggokiorder.models';
 
-const BASE_STYLE: string = 'position: absolute; left: 0px;';
 const TRANSITION: string = `top ease-in-out ${BASE_TRANSITION_TIME}ms, left ease-in-out ${BASE_TRANSITION_TIME}ms`;
 
 @Directive({
@@ -16,6 +15,7 @@ export class OrderDirective implements OnDestroy {
   public prevHeight: number = 0;
   public element: ElementRef = inject(ElementRef);
   private resizeObserver: ResizeObserver | undefined;
+  private resizeFrame: number | undefined;
   private readonly isBrowser: boolean = isPlatformBrowser(inject(PLATFORM_ID));
 
   constructor() {
@@ -51,10 +51,10 @@ export class OrderDirective implements OnDestroy {
       try {
         entries.forEach(entry => {
           const height: number = entry.contentRect.height;
-          if (this.prevHeight !== height) {
-            this.prevHeight = height;
-            this.needResize.emit();
-          }
+          if (this.prevHeight === height) return;
+
+          this.prevHeight = height;
+          this.emitNeedResize();
         });
       } catch (e) {
         console.error(e);
@@ -65,16 +65,33 @@ export class OrderDirective implements OnDestroy {
   }
 
   /**
+   * 리사이즈 알림 emit.
+   * ResizeObserver 콜백 안에서 동기로 레이아웃을 바꾸면 브라우저가
+   * 'ResizeObserver loop completed with undelivered notifications' 를 띄우므로 다음 프레임으로 미룬다.
+   * @return {void}
+   */
+  emitNeedResize(): void {
+    if (this.resizeFrame !== undefined) return;
+
+    this.resizeFrame = requestAnimationFrame(() => {
+      this.resizeFrame = undefined;
+      this.needResize.emit();
+    });
+  }
+
+  /**
    * 이벤트 제거
    * @return {void}
    */
   removeEvent(): void {
-    // 마우스 이벤트
-    this.element.nativeElement.removeEventListener('mousedown', this.mousedownEvent);
-
-    // 리사이즈 이벤트
+    // 리사이즈 이벤트 (mousedown 은 @HostListener 라 Angular 가 알아서 해제한다)
     this.resizeObserver?.disconnect();
     this.resizeObserver = undefined;
+
+    if (this.resizeFrame !== undefined) {
+      cancelAnimationFrame(this.resizeFrame);
+      this.resizeFrame = undefined;
+    }
 
     // 구독중인 에미터
     this.eventSubs.forEach(eventSub => {
@@ -93,7 +110,11 @@ export class OrderDirective implements OnDestroy {
   setBaseStyle(top: number, left: number = 0, zIndex: number = 1): number {
     this.setTransition(true);
     const element: HTMLElement = this.element.nativeElement;
-    element.style.cssText = BASE_STYLE;
+
+    // cssText 를 덮어쓰면 소비자가 요소에 건 인라인 스타일까지 지워지므로 필요한 속성만 지정한다.
+    // opacity 는 이동 중 적용된 값이 남지 않도록 여기서 초기화한다.
+    element.style.position = 'absolute';
+    element.style.opacity = '';
 
     return this.setPosition(top, left, zIndex);
   }

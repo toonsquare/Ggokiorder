@@ -1,10 +1,9 @@
 import * as i0 from '@angular/core';
-import { EventEmitter, inject, ElementRef, PLATFORM_ID, HostListener, Output, Directive, Input, ViewChild, ContentChildren, Component } from '@angular/core';
+import { EventEmitter, inject, ElementRef, PLATFORM_ID, HostListener, Output, Directive, ChangeDetectorRef, afterNextRender, Input, ViewChild, ContentChildren, Component } from '@angular/core';
 import { isPlatformBrowser, NgClass } from '@angular/common';
 
 const BASE_TRANSITION_TIME = 200;
 
-const BASE_STYLE = 'position: absolute; left: 0px;';
 const TRANSITION = `top ease-in-out ${BASE_TRANSITION_TIME}ms, left ease-in-out ${BASE_TRANSITION_TIME}ms`;
 class OrderDirective {
     startMousedown = new EventEmitter();
@@ -13,6 +12,7 @@ class OrderDirective {
     prevHeight = 0;
     element = inject(ElementRef);
     resizeObserver;
+    resizeFrame;
     isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
     constructor() {
         this.addEvent();
@@ -42,10 +42,10 @@ class OrderDirective {
             try {
                 entries.forEach(entry => {
                     const height = entry.contentRect.height;
-                    if (this.prevHeight !== height) {
-                        this.prevHeight = height;
-                        this.needResize.emit();
-                    }
+                    if (this.prevHeight === height)
+                        return;
+                    this.prevHeight = height;
+                    this.emitNeedResize();
                 });
             }
             catch (e) {
@@ -56,15 +56,31 @@ class OrderDirective {
         this.resizeObserver.observe(this.element.nativeElement);
     }
     /**
+     * 리사이즈 알림 emit.
+     * ResizeObserver 콜백 안에서 동기로 레이아웃을 바꾸면 브라우저가
+     * 'ResizeObserver loop completed with undelivered notifications' 를 띄우므로 다음 프레임으로 미룬다.
+     * @return {void}
+     */
+    emitNeedResize() {
+        if (this.resizeFrame !== undefined)
+            return;
+        this.resizeFrame = requestAnimationFrame(() => {
+            this.resizeFrame = undefined;
+            this.needResize.emit();
+        });
+    }
+    /**
      * 이벤트 제거
      * @return {void}
      */
     removeEvent() {
-        // 마우스 이벤트
-        this.element.nativeElement.removeEventListener('mousedown', this.mousedownEvent);
-        // 리사이즈 이벤트
+        // 리사이즈 이벤트 (mousedown 은 @HostListener 라 Angular 가 알아서 해제한다)
         this.resizeObserver?.disconnect();
         this.resizeObserver = undefined;
+        if (this.resizeFrame !== undefined) {
+            cancelAnimationFrame(this.resizeFrame);
+            this.resizeFrame = undefined;
+        }
         // 구독중인 에미터
         this.eventSubs.forEach(eventSub => {
             eventSub.unsubscribe();
@@ -81,7 +97,10 @@ class OrderDirective {
     setBaseStyle(top, left = 0, zIndex = 1) {
         this.setTransition(true);
         const element = this.element.nativeElement;
-        element.style.cssText = BASE_STYLE;
+        // cssText 를 덮어쓰면 소비자가 요소에 건 인라인 스타일까지 지워지므로 필요한 속성만 지정한다.
+        // opacity 는 이동 중 적용된 값이 남지 않도록 여기서 초기화한다.
+        element.style.position = 'absolute';
+        element.style.opacity = '';
         return this.setPosition(top, left, zIndex);
     }
     /**
@@ -138,6 +157,7 @@ var MousedownButton;
     MousedownButton[MousedownButton["None"] = -1] = "None";
 })(MousedownButton || (MousedownButton = {}));
 class GgokiorderComponent {
+    // descendants: true - 소비자가 행을 래퍼 요소로 감싸도 아이템을 찾을 수 있도록 한다
     items;
     scrollDiv;
     orderDiv;
@@ -181,6 +201,15 @@ class GgokiorderComponent {
     dropTargetItem; // 드랍 대상으로 하이라이트 중인 오브젝트 행
     dropBoundaryParentId;
     isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
+    changeDetectorRef = inject(ChangeDetectorRef);
+    constructor() {
+        // ggokiorder 초기화.
+        // afterNextRender 는 첫 렌더 뒤(변경 감지 밖)에 실행되므로 changeHeight emit 이 NG0100 을 유발하지 않고,
+        // 서버에서는 실행되지 않아 SSR 시 offsetHeight 접근도 일어나지 않는다.
+        afterNextRender(() => {
+            this.initGgokiorder(this.items);
+        });
+    }
     _mousedownItem; // mousedown 한 아이템
     get mousedownItem() {
         return this._mousedownItem;
@@ -204,10 +233,6 @@ class GgokiorderComponent {
             this.initGgokiorder(items);
         });
     }
-    ngAfterViewInit() {
-        // ggokiorder 초기화
-        this.initGgokiorder(this.items);
-    }
     ngOnDestroy() {
         // ng-content 구독 해제
         if (this.changeSub) {
@@ -224,6 +249,8 @@ class GgokiorderComponent {
      * @return {void}
      */
     initGgokiorder(orderElements) {
+        if (!this.objects)
+            throw new Error('[ggokiorder] objects Input 은 필수입니다');
         try {
             // sortItems 초기화
             this.orderItems = orderElements.map((directive, order) => {
@@ -270,7 +297,6 @@ class GgokiorderComponent {
                 const zIndex = this.isMoving && this.movingItems.includes(orderItem) ? zIndexMax-- : 1;
                 const itemHeight = orderItem.directive.setBaseStyle(orderItem.top, 0, zIndex);
                 // 부모가 있는 행은 자식 행 들여쓰기 적용 (들여쓰기 폭은 --child-indent, isHierarchy 전용)
-                // setBaseStyle 이 cssText 로 인라인 스타일을 초기화하므로 반드시 그 뒤에 적용해야 한다
                 element.style.paddingLeft = this.getParentObjectId(orderItem) != null ? 'var(--child-indent)' : '';
                 topElementHeight += itemHeight;
             });
@@ -278,6 +304,7 @@ class GgokiorderComponent {
             orderDiv.style.height = resultHeight;
             if (resultHeight !== prevHeight)
                 this.changeHeight.emit();
+            this.changeDetectorRef.markForCheck();
         }
         catch (e) {
             console.error(e);
@@ -291,9 +318,8 @@ class GgokiorderComponent {
     initMovingItems() {
         if (!this.selected || this.selected.length === 0)
             return;
-        this.movingItems = this.selected.map(index => {
-            return this.orderItems[index];
-        });
+        // 목록에서 아이템이 지워졌는데 selected 가 갱신되지 않은 경우 범위 밖 index 가 들어올 수 있으므로 걸러낸다
+        this.movingItems = this.selected.filter(index => this.orderItems[index] !== undefined).map(index => this.orderItems[index]);
     }
     /**
      * selected 목록 초기화
@@ -467,10 +493,15 @@ class GgokiorderComponent {
             // mousemove 일 때 초기화 안되어 있으면 초기화
             if (!this.isMovingInit) {
                 this.movingInit();
+                // 이동 대상이 없어 초기화가 중단된 경우 이동 처리를 하지 않는다
+                if (!this.isMovingInit)
+                    return;
                 this.setLastItem();
             }
             this.elementsMoving(event);
         }
+        // document 리스너라 zoneless 에서는 자동으로 변경 감지가 돌지 않는다
+        this.changeDetectorRef.markForCheck();
     };
     /**
      * 마지막 요소 부분 빈 div 세팅
@@ -527,6 +558,8 @@ class GgokiorderComponent {
             console.error(e);
             throw e;
         }
+        // document 리스너라 zoneless 에서는 자동으로 변경 감지가 돌지 않는다
+        this.changeDetectorRef.markForCheck();
     };
     /**
      * 선택 요소들 이동 전 초기화
@@ -538,6 +571,12 @@ class GgokiorderComponent {
             // 이동 대상 인덱스 확정 (isHierarchy 시 선택 부모의 자식 포함) 후 movingItems 재구성
             this.movingIndices = this.getMovingIndices();
             this.movingItems = this.movingIndices.map(index => this.orderItems[index]);
+            // 이동 대상이 없으면(selected 가 비었거나 전부 범위 밖) 이동을 시작하지 않는다
+            if (this.movingItems.length === 0) {
+                this.isMoving = false;
+                this.isMovingInit = false;
+                return;
+            }
             // 스크롤 최대값 저장
             const scrollDiv = this.scrollDiv.nativeElement;
             this.maxScroll = scrollDiv.scrollHeight - scrollDiv.clientHeight;
@@ -762,12 +801,17 @@ class GgokiorderComponent {
      * @return {void}
      */
     moveScroll(value) {
+        // 이동 중이 아니면(드래그 종료 후 인터벌이 남은 경우 등) 스크롤을 멈춘다
+        const firstMovingItem = this.movingItems[0];
+        if (!this.isMoving || firstMovingItem === undefined) {
+            this.toggleMovingScroll(false);
+            return;
+        }
         const scrollDiv = this.scrollDiv.nativeElement;
         try {
             // 스크롤 값 계산
             const scrollValue = Math.min(Math.max(0, scrollDiv.scrollTop + value), this.maxScroll);
             // movingItems 위치값 계산
-            const firstMovingItem = this.movingItems[0];
             const topValue = +firstMovingItem.directive.element.nativeElement.style.top.replace('px', '') + value;
             // 스크롤 이동
             scrollDiv.scrollTo({ top: scrollValue, behavior: 'smooth' });
@@ -779,6 +823,8 @@ class GgokiorderComponent {
             this.maxTop = this.maxTop + value;
             if (scrollValue === 0 || scrollValue === this.maxScroll)
                 this.toggleMovingScroll(false);
+            // setInterval 콜백이라 zoneless 에서는 자동으로 변경 감지가 돌지 않는다
+            this.changeDetectorRef.markForCheck();
         }
         catch (e) {
             console.error(e);
@@ -960,10 +1006,12 @@ class GgokiorderComponent {
      * @returns {number[]}
      */
     getMovingIndices() {
+        // 목록에서 아이템이 지워졌는데 selected 가 갱신되지 않은 경우를 대비해 범위 밖 index 는 걸러낸다
+        const selected = this.selected.filter(index => this.orderItems[index] !== undefined);
         if (!this.isHierarchy)
-            return [...this.selected];
-        const indices = new Set(this.selected);
-        this.selected.forEach(index => this.getChildIndices(index).forEach(childIndex => indices.add(childIndex)));
+            return selected;
+        const indices = new Set(selected);
+        selected.forEach(index => this.getChildIndices(index).forEach(childIndex => indices.add(childIndex)));
         return [...indices].sort((a, b) => a - b);
     }
     /**
@@ -1096,14 +1144,14 @@ class GgokiorderComponent {
         this.movingState.emit(this.isMoving);
     }
     static ɵfac = i0.ɵɵngDeclareFactory({ minVersion: "12.0.0", version: "19.2.25", ngImport: i0, type: GgokiorderComponent, deps: [], target: i0.ɵɵFactoryTarget.Component });
-    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.0.0", version: "19.2.25", type: GgokiorderComponent, isStandalone: true, selector: "ggokiorder", inputs: { selected: "selected", moveArea: "moveArea", objects: "objects", multiSelectMode: "multiSelectMode", allowNoSelection: "allowNoSelection", isHierarchy: "isHierarchy" }, outputs: { moved: "moved", clickItem: "clickItem", changeHeight: "changeHeight", movingState: "movingState" }, queries: [{ propertyName: "items", predicate: OrderDirective }], viewQueries: [{ propertyName: "scrollDiv", first: true, predicate: ["scrollDiv"], descendants: true }, { propertyName: "orderDiv", first: true, predicate: ["orderDiv"], descendants: true }, { propertyName: "emptyDiv", first: true, predicate: ["emptyDiv"], descendants: true }, { propertyName: "goalDivider", first: true, predicate: ["goalDivider"], descendants: true }], usesOnChanges: true, ngImport: i0, template: "<div class=\"ggokiorder-wrapper\">\n  <div #scrollDiv (mousedown)=\"unselectAllItem($event)\" (scroll)=\"setScroll($event)\" class=\"scroll-wrapper scroll-container\">\n    <div #orderDiv class=\"order-wrapper\">\n      <!-- \uC694\uC18C \uBAA9\uB85D -->\n      <ng-content></ng-content>\n      <div #emptyDiv class=\"empty-item\"></div>\n\n      <!-- \uC774\uB3D9\uC2DC\uD0AC \uC694\uC18C \uBAA9\uC801\uC9C0 \uD45C\uC2DC \uB514\uBC14\uC774\uB354 (\uBD80\uBAA8 \uD558\uC704 \uC704\uCE58\uBA74 \uC790\uC2DD \uD589\uCC98\uB7FC \uB4E4\uC5EC\uC4F0\uAE30) -->\n      <div\n        #goalDivider\n        [ngClass]=\"{ visible: targetIndex !== undefined && targetIndex >= 0 && isMoving, indented: isDividerIndented }\"\n        [style.top.px]=\"targetTop\"\n        class=\"goal-divider\"\n      ></div>\n    </div>\n  </div>\n\n  <!-- \uC694\uC18C \uC774\uB3D9\uC2DC \uC2A4\uD06C\uB864 -->\n  @if (isMoving) {\n    <div (mouseenter)=\"toggleMovingScroll(true, -30)\" (mouseleave)=\"toggleMovingScroll(false)\" class=\"scroll-div scroll-up\"></div>\n    <div (mouseenter)=\"toggleMovingScroll(true)\" (mouseleave)=\"toggleMovingScroll(false)\" class=\"scroll-div scroll-down\"></div>\n  }\n</div>\n", styles: [":host{--max-height: none;--scroll-spot-height: 20px;--goal-width: 100%;--goal-thickness: 2px;--goal-color: red;--goal-radius: 1px;--child-indent: 0px}.ggokiorder-wrapper{display:flex;position:relative;height:100%}.ggokiorder-wrapper .scroll-container{overflow:auto;scrollbar-color:rgba(0,0,0,.5) transparent}.ggokiorder-wrapper .scroll-wrapper{display:flex;position:relative;height:100%;width:100%;overflow-y:auto;overflow-x:hidden}.ggokiorder-wrapper .scroll-wrapper .order-wrapper{position:relative;width:100%;transition:scroll ease-in-out .1s;max-height:var(--max-height)}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .empty-item{position:absolute;background:transparent;width:100%;z-index:0}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider{position:absolute;visibility:hidden;left:calc((100% - var(--goal-width)) / 2);width:var(--goal-width);background:var(--goal-color);height:var(--goal-thickness);border-radius:var(--goal-radius)}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider.visible{visibility:visible;z-index:2}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider.indented{left:calc((100% - var(--goal-width)) / 2 + var(--child-indent) + 4px);width:calc(var(--goal-width) - var(--child-indent) - 4px)}.ggokiorder-wrapper .scroll-div{position:absolute;width:100%;background:transparent;z-index:2000;height:var(--scroll-spot-height)}.ggokiorder-wrapper .scroll-div.scroll-up{top:0}.ggokiorder-wrapper .scroll-div.scroll-down{bottom:0}\n"], dependencies: [{ kind: "directive", type: NgClass, selector: "[ngClass]", inputs: ["class", "ngClass"] }] });
+    static ɵcmp = i0.ɵɵngDeclareComponent({ minVersion: "17.0.0", version: "19.2.25", type: GgokiorderComponent, isStandalone: true, selector: "ggokiorder", inputs: { selected: "selected", moveArea: "moveArea", objects: "objects", multiSelectMode: "multiSelectMode", allowNoSelection: "allowNoSelection", isHierarchy: "isHierarchy" }, outputs: { moved: "moved", clickItem: "clickItem", changeHeight: "changeHeight", movingState: "movingState" }, queries: [{ propertyName: "items", predicate: OrderDirective, descendants: true }], viewQueries: [{ propertyName: "scrollDiv", first: true, predicate: ["scrollDiv"], descendants: true }, { propertyName: "orderDiv", first: true, predicate: ["orderDiv"], descendants: true }, { propertyName: "emptyDiv", first: true, predicate: ["emptyDiv"], descendants: true }, { propertyName: "goalDivider", first: true, predicate: ["goalDivider"], descendants: true }], usesOnChanges: true, ngImport: i0, template: "<div class=\"ggokiorder-wrapper\">\n  <div #scrollDiv (mousedown)=\"unselectAllItem($event)\" (scroll)=\"setScroll($event)\" class=\"scroll-wrapper scroll-container\">\n    <div #orderDiv class=\"order-wrapper\">\n      <!-- \uC694\uC18C \uBAA9\uB85D -->\n      <ng-content></ng-content>\n      <div #emptyDiv class=\"empty-item\"></div>\n\n      <!-- \uC774\uB3D9\uC2DC\uD0AC \uC694\uC18C \uBAA9\uC801\uC9C0 \uD45C\uC2DC \uB514\uBC14\uC774\uB354 (\uBD80\uBAA8 \uD558\uC704 \uC704\uCE58\uBA74 \uC790\uC2DD \uD589\uCC98\uB7FC \uB4E4\uC5EC\uC4F0\uAE30) -->\n      <div\n        #goalDivider\n        [ngClass]=\"{ visible: targetIndex !== undefined && targetIndex >= 0 && isMoving, indented: isDividerIndented }\"\n        [style.top.px]=\"targetTop\"\n        class=\"goal-divider\"\n      ></div>\n    </div>\n  </div>\n\n  <!-- \uC694\uC18C \uC774\uB3D9\uC2DC \uC2A4\uD06C\uB864 -->\n  @if (isMoving) {\n    <div (mouseenter)=\"toggleMovingScroll(true, -30)\" (mouseleave)=\"toggleMovingScroll(false)\" class=\"scroll-div scroll-up\"></div>\n    <div (mouseenter)=\"toggleMovingScroll(true)\" (mouseleave)=\"toggleMovingScroll(false)\" class=\"scroll-div scroll-down\"></div>\n  }\n</div>\n", styles: [":host{--max-height: none;--scroll-spot-height: 20px;--goal-width: 100%;--goal-thickness: 2px;--goal-color: red;--goal-radius: 1px;--child-indent: 0px}.ggokiorder-wrapper{display:flex;position:relative;height:100%}.ggokiorder-wrapper .scroll-container{overflow:auto;scrollbar-color:rgba(0,0,0,.5) transparent}.ggokiorder-wrapper .scroll-wrapper{display:flex;position:relative;height:100%;width:100%;overflow-y:auto;overflow-x:hidden}.ggokiorder-wrapper .scroll-wrapper .order-wrapper{position:relative;width:100%;transition:scroll ease-in-out .1s;max-height:var(--max-height)}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .empty-item{position:absolute;background:transparent;width:100%;z-index:0}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider{position:absolute;visibility:hidden;left:calc((100% - var(--goal-width)) / 2);width:var(--goal-width);background:var(--goal-color);height:var(--goal-thickness);border-radius:var(--goal-radius)}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider.visible{visibility:visible;z-index:2}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider.indented{left:calc((100% - var(--goal-width)) / 2 + var(--child-indent) + 4px);width:calc(var(--goal-width) - var(--child-indent) - 4px)}.ggokiorder-wrapper .scroll-div{position:absolute;width:100%;background:transparent;z-index:2000;height:var(--scroll-spot-height)}.ggokiorder-wrapper .scroll-div.scroll-up{top:0}.ggokiorder-wrapper .scroll-div.scroll-down{bottom:0}\n"], dependencies: [{ kind: "directive", type: NgClass, selector: "[ngClass]", inputs: ["class", "ngClass"] }] });
 }
 i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "19.2.25", ngImport: i0, type: GgokiorderComponent, decorators: [{
             type: Component,
             args: [{ selector: 'ggokiorder', imports: [NgClass], standalone: true, template: "<div class=\"ggokiorder-wrapper\">\n  <div #scrollDiv (mousedown)=\"unselectAllItem($event)\" (scroll)=\"setScroll($event)\" class=\"scroll-wrapper scroll-container\">\n    <div #orderDiv class=\"order-wrapper\">\n      <!-- \uC694\uC18C \uBAA9\uB85D -->\n      <ng-content></ng-content>\n      <div #emptyDiv class=\"empty-item\"></div>\n\n      <!-- \uC774\uB3D9\uC2DC\uD0AC \uC694\uC18C \uBAA9\uC801\uC9C0 \uD45C\uC2DC \uB514\uBC14\uC774\uB354 (\uBD80\uBAA8 \uD558\uC704 \uC704\uCE58\uBA74 \uC790\uC2DD \uD589\uCC98\uB7FC \uB4E4\uC5EC\uC4F0\uAE30) -->\n      <div\n        #goalDivider\n        [ngClass]=\"{ visible: targetIndex !== undefined && targetIndex >= 0 && isMoving, indented: isDividerIndented }\"\n        [style.top.px]=\"targetTop\"\n        class=\"goal-divider\"\n      ></div>\n    </div>\n  </div>\n\n  <!-- \uC694\uC18C \uC774\uB3D9\uC2DC \uC2A4\uD06C\uB864 -->\n  @if (isMoving) {\n    <div (mouseenter)=\"toggleMovingScroll(true, -30)\" (mouseleave)=\"toggleMovingScroll(false)\" class=\"scroll-div scroll-up\"></div>\n    <div (mouseenter)=\"toggleMovingScroll(true)\" (mouseleave)=\"toggleMovingScroll(false)\" class=\"scroll-div scroll-down\"></div>\n  }\n</div>\n", styles: [":host{--max-height: none;--scroll-spot-height: 20px;--goal-width: 100%;--goal-thickness: 2px;--goal-color: red;--goal-radius: 1px;--child-indent: 0px}.ggokiorder-wrapper{display:flex;position:relative;height:100%}.ggokiorder-wrapper .scroll-container{overflow:auto;scrollbar-color:rgba(0,0,0,.5) transparent}.ggokiorder-wrapper .scroll-wrapper{display:flex;position:relative;height:100%;width:100%;overflow-y:auto;overflow-x:hidden}.ggokiorder-wrapper .scroll-wrapper .order-wrapper{position:relative;width:100%;transition:scroll ease-in-out .1s;max-height:var(--max-height)}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .empty-item{position:absolute;background:transparent;width:100%;z-index:0}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider{position:absolute;visibility:hidden;left:calc((100% - var(--goal-width)) / 2);width:var(--goal-width);background:var(--goal-color);height:var(--goal-thickness);border-radius:var(--goal-radius)}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider.visible{visibility:visible;z-index:2}.ggokiorder-wrapper .scroll-wrapper .order-wrapper .goal-divider.indented{left:calc((100% - var(--goal-width)) / 2 + var(--child-indent) + 4px);width:calc(var(--goal-width) - var(--child-indent) - 4px)}.ggokiorder-wrapper .scroll-div{position:absolute;width:100%;background:transparent;z-index:2000;height:var(--scroll-spot-height)}.ggokiorder-wrapper .scroll-div.scroll-up{top:0}.ggokiorder-wrapper .scroll-div.scroll-down{bottom:0}\n"] }]
-        }], propDecorators: { items: [{
+        }], ctorParameters: () => [], propDecorators: { items: [{
                 type: ContentChildren,
-                args: [OrderDirective]
+                args: [OrderDirective, { descendants: true }]
             }], scrollDiv: [{
                 type: ViewChild,
                 args: ['scrollDiv']
@@ -1121,7 +1169,8 @@ i0.ɵɵngDeclareClassMetadata({ minVersion: "12.0.0", version: "19.2.25", ngImpo
             }], moveArea: [{
                 type: Input
             }], objects: [{
-                type: Input
+                type: Input,
+                args: [{ required: true }]
             }], multiSelectMode: [{
                 type: Input
             }], allowNoSelection: [{

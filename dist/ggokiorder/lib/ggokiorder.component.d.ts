@@ -1,8 +1,8 @@
-import { AfterContentInit, AfterViewInit, ElementRef, EventEmitter, OnChanges, OnDestroy, QueryList, SimpleChanges } from '@angular/core';
+import { AfterContentInit, ElementRef, EventEmitter, OnChanges, OnDestroy, QueryList, SimpleChanges } from '@angular/core';
 import { OrderDirective } from './order.directive';
 import { ClickItem, GgokiorderItem, GgokiorderObject, MovedItem, MovedObject, MovedResultArray, OrderEvent } from './ggokiorder.models';
 import * as i0 from "@angular/core";
-export declare class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> implements AfterViewInit, AfterContentInit, OnDestroy, OnChanges {
+export declare class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> implements AfterContentInit, OnDestroy, OnChanges {
     items: QueryList<OrderDirective>;
     scrollDiv: ElementRef;
     orderDiv: ElementRef;
@@ -46,13 +46,14 @@ export declare class GgokiorderComponent<T extends GgokiorderObject = Ggokiorder
     private dropTargetItem;
     private dropBoundaryParentId?;
     private readonly isBrowser;
+    private readonly changeDetectorRef;
+    constructor();
     private _mousedownItem;
     get mousedownItem(): GgokiorderItem<T> | undefined;
     set mousedownItem(item: GgokiorderItem<T> | undefined);
     get ensureMousedownItem(): GgokiorderItem<T>;
     ngOnChanges(changes: SimpleChanges): void;
     ngAfterContentInit(): void;
-    ngAfterViewInit(): void;
     ngOnDestroy(): void;
     /**
      * ng-content 요소들 기본 스타일 적용
@@ -290,5 +291,5 @@ export declare class GgokiorderComponent<T extends GgokiorderObject = Ggokiorder
      */
     private applyMoveResult;
     static ɵfac: i0.ɵɵFactoryDeclaration<GgokiorderComponent<any>, never>;
-    static ɵcmp: i0.ɵɵComponentDeclaration<GgokiorderComponent<any>, "ggokiorder", never, { "selected": { "alias": "selected"; "required": false; }; "moveArea": { "alias": "moveArea"; "required": false; }; "objects": { "alias": "objects"; "required": false; }; "multiSelectMode": { "alias": "multiSelectMode"; "required": false; }; "allowNoSelection": { "alias": "allowNoSelection"; "required": false; }; "isHierarchy": { "alias": "isHierarchy"; "required": false; }; }, { "moved": "moved"; "clickItem": "clickItem"; "changeHeight": "changeHeight"; "movingState": "movingState"; }, ["items"], ["*"], true, never>;
+    static ɵcmp: i0.ɵɵComponentDeclaration<GgokiorderComponent<any>, "ggokiorder", never, { "selected": { "alias": "selected"; "required": false; }; "moveArea": { "alias": "moveArea"; "required": false; }; "objects": { "alias": "objects"; "required": true; }; "multiSelectMode": { "alias": "multiSelectMode"; "required": false; }; "allowNoSelection": { "alias": "allowNoSelection"; "required": false; }; "isHierarchy": { "alias": "isHierarchy"; "required": false; }; }, { "moved": "moved"; "clickItem": "clickItem"; "changeHeight": "changeHeight"; "movingState": "movingState"; }, ["items"], ["*"], true, never>;
 }

@@ -1,6 +1,6 @@
 import {
   AfterContentInit,
-  AfterViewInit,
+  ChangeDetectorRef,
   Component,
   ContentChildren,
   ElementRef,
@@ -13,6 +13,7 @@ import {
   QueryList,
   SimpleChanges,
   ViewChild,
+  afterNextRender,
   inject
 } from '@angular/core';
 import { Subscription } from 'rxjs';
@@ -45,8 +46,8 @@ enum MousedownButton {
   imports: [NgClass],
   standalone: true
 })
-export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> implements AfterViewInit, AfterContentInit, OnDestroy, OnChanges {
-  @ContentChildren(OrderDirective) items!: QueryList<OrderDirective>;
+export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> implements AfterContentInit, OnDestroy, OnChanges {
+  @ContentChildren(OrderDirective, { descendants: true }) items!: QueryList<OrderDirective>;
 
   @ViewChild('scrollDiv') scrollDiv!: ElementRef;
   @ViewChild('orderDiv') orderDiv!: ElementRef;
@@ -55,7 +56,7 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
 
   @Input() selected: number[] = [];
   @Input() moveArea: number = 10;
-  @Input() objects!: T[];
+  @Input({ required: true }) objects!: T[];
   @Input() multiSelectMode: boolean = true;
   @Input() allowNoSelection: boolean = false;
   @Input() isHierarchy: boolean = false;
@@ -92,6 +93,13 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
   private dropTargetItem: GgokiorderItem<T> | undefined; // 드랍 대상으로 하이라이트 중인 오브젝트 행
   private dropBoundaryParentId?: number | null;
   private readonly isBrowser: boolean = isPlatformBrowser(inject(PLATFORM_ID));
+  private readonly changeDetectorRef: ChangeDetectorRef = inject(ChangeDetectorRef);
+
+  constructor() {
+    afterNextRender(() => {
+      this.initGgokiorder(this.items);
+    });
+  }
 
   private _mousedownItem: GgokiorderItem<T> | undefined; // mousedown 한 아이템
 
@@ -121,11 +129,6 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
     });
   }
 
-  ngAfterViewInit() {
-    // ggokiorder 초기화
-    this.initGgokiorder(this.items);
-  }
-
   ngOnDestroy(): void {
     // ng-content 구독 해제
     if (this.changeSub) {
@@ -143,6 +146,8 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
    * @return {void}
    */
   initGgokiorder(orderElements: QueryList<OrderDirective>): void {
+    if (!this.objects) throw new Error('[ggokiorder] objects Input 은 필수입니다');
+
     try {
       // sortItems 초기화
       this.orderItems = orderElements.map((directive, order) => {
@@ -199,7 +204,6 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
         const itemHeight: number = orderItem.directive.setBaseStyle(orderItem.top, 0, zIndex);
 
         // 부모가 있는 행은 자식 행 들여쓰기 적용 (들여쓰기 폭은 --child-indent, isHierarchy 전용)
-        // setBaseStyle 이 cssText 로 인라인 스타일을 초기화하므로 반드시 그 뒤에 적용해야 한다
         element.style.paddingLeft = this.getParentObjectId(orderItem) != null ? 'var(--child-indent)' : '';
         topElementHeight += itemHeight;
       });
@@ -207,6 +211,8 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       const resultHeight: string = `${topElementHeight}px`;
       orderDiv.style.height = resultHeight;
       if (resultHeight !== prevHeight) this.changeHeight.emit();
+
+      this.changeDetectorRef.markForCheck();
     } catch (e) {
       console.error(e);
       throw e;
@@ -220,9 +226,8 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
   initMovingItems(): void {
     if (!this.selected || this.selected.length === 0) return;
 
-    this.movingItems = this.selected.map(index => {
-      return this.orderItems[index];
-    });
+    // 목록에서 아이템이 지워졌는데 selected 가 갱신되지 않은 경우 범위 밖 index 가 들어올 수 있으므로 걸러낸다
+    this.movingItems = this.selected.filter(index => this.orderItems[index] !== undefined).map(index => this.orderItems[index]);
   }
 
   /**
@@ -412,11 +417,17 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       // mousemove 일 때 초기화 안되어 있으면 초기화
       if (!this.isMovingInit) {
         this.movingInit();
+
+        // 이동 대상이 없어 초기화가 중단된 경우 이동 처리를 하지 않는다
+        if (!this.isMovingInit) return;
         this.setLastItem();
       }
 
       this.elementsMoving(event);
     }
+
+    // document 리스너라 zoneless 에서는 자동으로 변경 감지가 돌지 않는다
+    this.changeDetectorRef.markForCheck();
   };
 
   /**
@@ -476,6 +487,9 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       console.error(e);
       throw e;
     }
+
+    // document 리스너라 zoneless 에서는 자동으로 변경 감지가 돌지 않는다
+    this.changeDetectorRef.markForCheck();
   };
 
   /**
@@ -489,6 +503,13 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       // 이동 대상 인덱스 확정 (isHierarchy 시 선택 부모의 자식 포함) 후 movingItems 재구성
       this.movingIndices = this.getMovingIndices();
       this.movingItems = this.movingIndices.map(index => this.orderItems[index]);
+
+      // 이동 대상이 없으면(selected 가 비었거나 전부 범위 밖) 이동을 시작하지 않는다
+      if (this.movingItems.length === 0) {
+        this.isMoving = false;
+        this.isMovingInit = false;
+        return;
+      }
 
       // 스크롤 최대값 저장
       const scrollDiv: HTMLElement = this.scrollDiv.nativeElement;
@@ -742,6 +763,13 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
    * @return {void}
    */
   moveScroll(value: number): void {
+    // 이동 중이 아니면(드래그 종료 후 인터벌이 남은 경우 등) 스크롤을 멈춘다
+    const firstMovingItem: GgokiorderItem<T> | undefined = this.movingItems[0];
+    if (!this.isMoving || firstMovingItem === undefined) {
+      this.toggleMovingScroll(false);
+      return;
+    }
+
     const scrollDiv: HTMLElement = this.scrollDiv.nativeElement;
 
     try {
@@ -749,7 +777,6 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       const scrollValue: number = Math.min(Math.max(0, scrollDiv.scrollTop + value), this.maxScroll);
 
       // movingItems 위치값 계산
-      const firstMovingItem: GgokiorderItem<T> = this.movingItems[0];
       const topValue: number = +firstMovingItem.directive.element.nativeElement.style.top.replace('px', '') + value;
 
       // 스크롤 이동
@@ -764,6 +791,9 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       this.maxTop = this.maxTop + value;
 
       if (scrollValue === 0 || scrollValue === this.maxScroll) this.toggleMovingScroll(false);
+
+      // setInterval 콜백이라 zoneless 에서는 자동으로 변경 감지가 돌지 않는다
+      this.changeDetectorRef.markForCheck();
     } catch (e) {
       console.error(e);
       throw e;
@@ -962,10 +992,12 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
    * @returns {number[]}
    */
   private getMovingIndices(): number[] {
-    if (!this.isHierarchy) return [...this.selected];
+    // 목록에서 아이템이 지워졌는데 selected 가 갱신되지 않은 경우를 대비해 범위 밖 index 는 걸러낸다
+    const selected: number[] = this.selected.filter(index => this.orderItems[index] !== undefined);
+    if (!this.isHierarchy) return selected;
 
-    const indices: Set<number> = new Set<number>(this.selected);
-    this.selected.forEach(index => this.getChildIndices(index).forEach(childIndex => indices.add(childIndex)));
+    const indices: Set<number> = new Set<number>(selected);
+    selected.forEach(index => this.getChildIndices(index).forEach(childIndex => indices.add(childIndex)));
     return [...indices].sort((a, b) => a - b);
   }
 
