@@ -1,4 +1,5 @@
-import { Directive, ElementRef, EventEmitter, HostListener, inject, OnDestroy, Output } from '@angular/core';
+import { Directive, ElementRef, EventEmitter, HostListener, inject, OnDestroy, Output, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { OrderEvent, BASE_TRANSITION_TIME } from './ggokiorder.models';
 
@@ -15,6 +16,7 @@ export class OrderDirective implements OnDestroy {
   public prevHeight: number = 0;
   public element: ElementRef = inject(ElementRef);
   private resizeObserver: ResizeObserver | undefined;
+  private readonly isBrowser: boolean = isPlatformBrowser(inject(PLATFORM_ID));
 
   constructor() {
     this.addEvent();
@@ -41,6 +43,9 @@ export class OrderDirective implements OnDestroy {
    * @return {void}
    */
   addEvent(): void {
+    // SSR 등 브라우저가 아닌 환경에는 ResizeObserver 가 없다
+    if (!this.isBrowser) return;
+
     // 리사이즈 이벤트
     this.resizeObserver = new ResizeObserver(entries => {
       try {

@@ -1,6 +1,6 @@
 import * as i0 from '@angular/core';
-import { EventEmitter, inject, ElementRef, HostListener, Output, Directive, Input, ViewChild, ContentChildren, Component } from '@angular/core';
-import { NgClass } from '@angular/common';
+import { EventEmitter, inject, ElementRef, PLATFORM_ID, HostListener, Output, Directive, Input, ViewChild, ContentChildren, Component } from '@angular/core';
+import { isPlatformBrowser, NgClass } from '@angular/common';
 
 const BASE_TRANSITION_TIME = 200;
 
@@ -13,6 +13,7 @@ class OrderDirective {
     prevHeight = 0;
     element = inject(ElementRef);
     resizeObserver;
+    isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
     constructor() {
         this.addEvent();
     }
@@ -33,6 +34,9 @@ class OrderDirective {
      * @return {void}
      */
     addEvent() {
+        // SSR 등 브라우저가 아닌 환경에는 ResizeObserver 가 없다
+        if (!this.isBrowser)
+            return;
         // 리사이즈 이벤트
         this.resizeObserver = new ResizeObserver(entries => {
             try {
@@ -176,6 +180,7 @@ class GgokiorderComponent {
     isInternallyChanged = false;
     dropTargetItem; // 드랍 대상으로 하이라이트 중인 오브젝트 행
     dropBoundaryParentId;
+    isBrowser = isPlatformBrowser(inject(PLATFORM_ID));
     _mousedownItem; // mousedown 한 아이템
     get mousedownItem() {
         return this._mousedownItem;
@@ -208,6 +213,10 @@ class GgokiorderComponent {
         if (this.changeSub) {
             this.changeSub.unsubscribe();
         }
+        // 드래그 도중 파괴되는 경우 document 에 남는 이벤트와 스크롤 인터벌 정리
+        if (this.isBrowser)
+            this.removeDocumentEvents();
+        this.toggleMovingScroll(false);
     }
     /**
      * ng-content 요소들 기본 스타일 적용
@@ -359,9 +368,7 @@ class GgokiorderComponent {
             throw e;
         }
         // add mouse event
-        document.body.addEventListener('mousemove', this.mousemoveEvent);
-        document.body.addEventListener('mouseup', this.mouseupEvent);
-        document.body.addEventListener('mouseleave', this.mouseupEvent);
+        this.addDocumentEvents();
     }
     /**
      * Shift Mousedown 으로 Multi select
@@ -487,9 +494,7 @@ class GgokiorderComponent {
      */
     mouseupEvent = (event) => {
         // remove mouse event
-        document.body.removeEventListener('mousemove', this.mousemoveEvent);
-        document.body.removeEventListener('mouseup', this.mouseupEvent);
-        document.body.removeEventListener('mouseleave', this.mouseupEvent);
+        this.removeDocumentEvents();
         this.mousedownButton = MousedownButton.None;
         const isCtrl = event.ctrlKey || event.metaKey;
         const isShift = event.shiftKey;
@@ -791,8 +796,28 @@ class GgokiorderComponent {
                 this.moveScroll(value);
             }, 100);
         }
-        else if (this.scrollInterval)
+        else if (this.scrollInterval) {
             clearInterval(this.scrollInterval);
+            this.scrollInterval = 0;
+        }
+    }
+    /**
+     * 드래그 추적용 document 이벤트 등록
+     * @return {void}
+     */
+    addDocumentEvents() {
+        document.body.addEventListener('mousemove', this.mousemoveEvent);
+        document.body.addEventListener('mouseup', this.mouseupEvent);
+        document.body.addEventListener('mouseleave', this.mouseupEvent);
+    }
+    /**
+     * 드래그 추적용 document 이벤트 해제
+     * @return {void}
+     */
+    removeDocumentEvents() {
+        document.body.removeEventListener('mousemove', this.mousemoveEvent);
+        document.body.removeEventListener('mouseup', this.mouseupEvent);
+        document.body.removeEventListener('mouseleave', this.mouseupEvent);
     }
     /**
      * 선택한 모든 아이템 선택 취소

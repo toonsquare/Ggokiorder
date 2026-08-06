@@ -9,46 +9,27 @@ import {
   OnChanges,
   OnDestroy,
   Output,
+  PLATFORM_ID,
   QueryList,
   SimpleChanges,
-  ViewChild
+  ViewChild,
+  inject
 } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { OrderDirective } from './order.directive';
-import { ClickItem, GgokiorderObject, MovedObject, OrderEvent } from './ggokiorder.models';
-import { NgClass } from '@angular/common';
+import {
+  ClickItem,
+  GgokiorderHierarchyObject,
+  GgokiorderItem,
+  GgokiorderObject,
+  MovedItem,
+  MovedObject,
+  MovedResultArray,
+  OrderEvent
+} from './ggokiorder.models';
+import { NgClass, isPlatformBrowser } from '@angular/common';
 
 const MOVING_ITEMS_GAP: number = 10;
-
-interface GgokiorderItem<T extends GgokiorderObject = GgokiorderObject> {
-  directive: OrderDirective;
-  object: T;
-  order: number;
-  top: number;
-  prevTop?: number;
-  isMousedown?: boolean;
-}
-
-interface MovedItem {
-  prev: number;
-  isSelected: boolean;
-}
-
-interface MovedResultArray {
-  items: MovedItem[];
-  orders: number[];
-}
-
-/**
- * isHierarchy 모드에서 projected 아이템(object)이 만족해야 하는 계층 인터페이스.
- * - id / parentObjectId 로 부모-자식 관계를 표현한다. (parentObjectId 가 null 이면 최상위)
- * - 부모 행은 isCollapsed(Angular WritableSignal) 로 접힘 상태를 노출/제어한다.
- */
-interface GgokiorderHierarchyObject {
-  id: number;
-  parentObjectId?: number | null;
-  isCollapsed?: { (): boolean; set(value: boolean): void };
-}
 
 enum MousedownButton {
   Left = 0,
@@ -110,6 +91,7 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
   private isInternallyChanged: boolean = false;
   private dropTargetItem: GgokiorderItem<T> | undefined; // 드랍 대상으로 하이라이트 중인 오브젝트 행
   private dropBoundaryParentId?: number | null;
+  private readonly isBrowser: boolean = isPlatformBrowser(inject(PLATFORM_ID));
 
   private _mousedownItem: GgokiorderItem<T> | undefined; // mousedown 한 아이템
 
@@ -149,6 +131,10 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
     if (this.changeSub) {
       this.changeSub.unsubscribe();
     }
+
+    // 드래그 도중 파괴되는 경우 document 에 남는 이벤트와 스크롤 인터벌 정리
+    if (this.isBrowser) this.removeDocumentEvents();
+    this.toggleMovingScroll(false);
   }
 
   /**
@@ -317,9 +303,7 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
     }
 
     // add mouse event
-    document.body.addEventListener('mousemove', this.mousemoveEvent);
-    document.body.addEventListener('mouseup', this.mouseupEvent);
-    document.body.addEventListener('mouseleave', this.mouseupEvent);
+    this.addDocumentEvents();
   }
 
   /**
@@ -457,9 +441,7 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
    */
   mouseupEvent: (event: MouseEvent) => void = (event: MouseEvent): void => {
     // remove mouse event
-    document.body.removeEventListener('mousemove', this.mousemoveEvent);
-    document.body.removeEventListener('mouseup', this.mouseupEvent);
-    document.body.removeEventListener('mouseleave', this.mouseupEvent);
+    this.removeDocumentEvents();
 
     this.mousedownButton = MousedownButton.None;
 
@@ -798,7 +780,30 @@ export class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> 
       this.scrollInterval = window.setInterval(() => {
         this.moveScroll(value);
       }, 100);
-    } else if (this.scrollInterval) clearInterval(this.scrollInterval);
+    } else if (this.scrollInterval) {
+      clearInterval(this.scrollInterval);
+      this.scrollInterval = 0;
+    }
+  }
+
+  /**
+   * 드래그 추적용 document 이벤트 등록
+   * @return {void}
+   */
+  private addDocumentEvents(): void {
+    document.body.addEventListener('mousemove', this.mousemoveEvent);
+    document.body.addEventListener('mouseup', this.mouseupEvent);
+    document.body.addEventListener('mouseleave', this.mouseupEvent);
+  }
+
+  /**
+   * 드래그 추적용 document 이벤트 해제
+   * @return {void}
+   */
+  private removeDocumentEvents(): void {
+    document.body.removeEventListener('mousemove', this.mousemoveEvent);
+    document.body.removeEventListener('mouseup', this.mouseupEvent);
+    document.body.removeEventListener('mouseleave', this.mouseupEvent);
   }
 
   /**

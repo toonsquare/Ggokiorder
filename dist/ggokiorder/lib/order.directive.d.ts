@@ -9,6 +9,7 @@ export declare class OrderDirective implements OnDestroy {
     prevHeight: number;
     element: ElementRef;
     private resizeObserver;
+    private readonly isBrowser;
     constructor();
     ngOnDestroy(): void;
     /**

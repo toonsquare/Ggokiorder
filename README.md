@@ -43,7 +43,7 @@
 
 - __필수__ `Input`. 타입 `T[]` (`T extends GgokiorderObject`)
 - 요소 목록에 대응하는 object 배열. `orderDirective` 를 붙인 요소들과 순서가 일치해야 한다
-- `GgokiorderObject` 는 `{ id: number; parentObjectId?: number }` 를 만족해야 한다
+- `GgokiorderObject` 는 `{ id: number; parentObjectId: number | null }` 를 만족해야 한다
 - __ggokiorder 가 이동 결과를 이 배열에 직접 반영(in-place)한다__
 
 ### `selected`

@@ -1,23 +1,7 @@
 import { AfterContentInit, AfterViewInit, ElementRef, EventEmitter, OnChanges, OnDestroy, QueryList, SimpleChanges } from '@angular/core';
 import { OrderDirective } from './order.directive';
-import { ClickItem, GgokiorderObject, MovedObject, OrderEvent } from './ggokiorder.models';
+import { ClickItem, GgokiorderItem, GgokiorderObject, MovedItem, MovedObject, MovedResultArray, OrderEvent } from './ggokiorder.models';
 import * as i0 from "@angular/core";
-interface GgokiorderItem<T extends GgokiorderObject = GgokiorderObject> {
-    directive: OrderDirective;
-    object: T;
-    order: number;
-    top: number;
-    prevTop?: number;
-    isMousedown?: boolean;
-}
-interface MovedItem {
-    prev: number;
-    isSelected: boolean;
-}
-interface MovedResultArray {
-    items: MovedItem[];
-    orders: number[];
-}
 export declare class GgokiorderComponent<T extends GgokiorderObject = GgokiorderObject> implements AfterViewInit, AfterContentInit, OnDestroy, OnChanges {
     items: QueryList<OrderDirective>;
     scrollDiv: ElementRef;
@@ -61,6 +45,7 @@ export declare class GgokiorderComponent<T extends GgokiorderObject = Ggokiorder
     private isInternallyChanged;
     private dropTargetItem;
     private dropBoundaryParentId?;
+    private readonly isBrowser;
     private _mousedownItem;
     get mousedownItem(): GgokiorderItem<T> | undefined;
     set mousedownItem(item: GgokiorderItem<T> | undefined);
@@ -202,6 +187,16 @@ export declare class GgokiorderComponent<T extends GgokiorderObject = Ggokiorder
      */
     toggleMovingScroll(isMovingScroll: boolean, value?: number): void;
     /**
+     * 드래그 추적용 document 이벤트 등록
+     * @return {void}
+     */
+    private addDocumentEvents;
+    /**
+     * 드래그 추적용 document 이벤트 해제
+     * @return {void}
+     */
+    private removeDocumentEvents;
+    /**
      * 선택한 모든 아이템 선택 취소
      * @param {MouseEvent} event
      * @return {void}
@@ -297,4 +292,3 @@ export declare class GgokiorderComponent<T extends GgokiorderObject = Ggokiorder
     static ɵfac: i0.ɵɵFactoryDeclaration<GgokiorderComponent<any>, never>;
     static ɵcmp: i0.ɵɵComponentDeclaration<GgokiorderComponent<any>, "ggokiorder", never, { "selected": { "alias": "selected"; "required": false; }; "moveArea": { "alias": "moveArea"; "required": false; }; "objects": { "alias": "objects"; "required": false; }; "multiSelectMode": { "alias": "multiSelectMode"; "required": false; }; "allowNoSelection": { "alias": "allowNoSelection"; "required": false; }; "isHierarchy": { "alias": "isHierarchy"; "required": false; }; }, { "moved": "moved"; "clickItem": "clickItem"; "changeHeight": "changeHeight"; "movingState": "movingState"; }, ["items"], ["*"], true, never>;
 }
-export {};
