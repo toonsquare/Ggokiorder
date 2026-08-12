@@ -3,6 +3,9 @@
 # Compiled output
 /dist/*
 !/dist/ggokiorder
+# ng-packagr 가 매 빌드마다 재생성하며, 내용이 `**/package.json` 이라
+# tarball 에서 dist/ggokiorder/package.json 을 지워버린다. 절대 커밋 금지.
+/dist/ggokiorder/.npmignore
 /tmp
 /out-tsc
 /bazel-out
