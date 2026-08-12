@@ -2,6 +2,36 @@
 
 요소 목록의 순서 변경을 위한 컴포넌트 sortable 대체재
 
+## 설치
+
+Angular 19 / 20 을 지원한다. (`peerDependencies: >=19.0.0 <21.0.0`)
+
+```bash
+npm i github:toonsquare/Ggokiorder#v1.0.1
+```
+
+`v1.0.1` 부터는 빌드 산출물(`dist/ggokiorder`)이 루트인 `release` 브랜치를
+가리키므로 패키지 이름 그대로 import 하면 된다.
+
+```ts
+import { GgokiorderComponent } from 'ggokiorder';
+```
+
+> `v1.0.0` 은 루트가 Angular 워크스페이스라 `ggokiorder/dist/ggokiorder` 경로로
+> import 해야 했고, Angular 19 가 중첩 설치되어 NG3004 가 발생했다.
+> 반드시 `v1.0.1` 이상을 사용할 것.
+
+## 개발
+
+```bash
+npm ci
+npm run build:lib    # dist/ggokiorder 생성
+npm run pack:lib     # tarball 생성해 내용 확인
+```
+
+`release` 브랜치는 `dist/ggokiorder` 트리를 그대로 루트로 갖는 배포 전용
+브랜치다. 소스는 `main` 에서만 수정한다.
+
 # 선택 및 이동 규칙
 
 ## 레퍼런스 : 구글 PPT 의 페이지 선택 및 이동
